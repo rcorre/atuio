@@ -1,0 +1,6 @@
+---
+source: src/tui.rs
+assertion_line: 153
+expression: test.render()
+---
+
