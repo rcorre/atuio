@@ -7,7 +7,7 @@ pub const APP_NAME: &'static str = env!("CARGO_PKG_NAME");
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct CLI {
-    path: Option<std::path::PathBuf>,
+    path: std::path::PathBuf,
 }
 
 fn main() -> Result<()> {
