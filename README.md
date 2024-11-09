@@ -1,10 +1,10 @@
-# Boxt
+# Atuio
 
-Boxt is a TUI for drawing box diagrams in the terminal.
+Atuio is a TUI for viewing and editing sound files.
 
 # Installation
 
 ## From Source
 ```
-cargo install boxt
+cargo install atuio
 ```
