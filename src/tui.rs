@@ -22,6 +22,7 @@ struct App {
     _stream: OutputStream,
     stream_handle: OutputStreamHandle,
     source: Buffered<Decoder<BufReader<File>>>,
+    cursor: f64, // position in seconds
 }
 
 impl App {
@@ -39,6 +40,7 @@ impl App {
             _stream: stream,
             stream_handle,
             source,
+            cursor: 0.0,
             exit: false,
         })
     }
@@ -56,6 +58,7 @@ impl App {
     }
 
     fn apply_action(&mut self, action: Action) -> Result<()> {
+        log::trace!("Applying action: {action:?}");
         match action {
             Action::Quit => {
                 log::info!("Exit requested");
@@ -63,6 +66,12 @@ impl App {
             }
             Action::Save => {
                 log::info!("TODO Save not handled");
+            }
+            Action::CursorLeft => {
+                self.cursor = (self.cursor - 0.01).max(0.0);
+            }
+            Action::CursorRight => {
+                self.cursor = (self.cursor + 0.01).max(0.0);
             }
         }
         Ok(())
@@ -127,28 +136,31 @@ impl Widget for &App {
             .enumerate()
             .map(|(i, v)| ((i as f64) / sample_rate, (v as f64) / (i16::MAX as f64)))
             .collect();
-        // Create the datasets to fill the chart with
+
+        let cursor_data = [(self.cursor, -1.0), (self.cursor, 1.0)];
         let datasets = vec![
-            // Scatter chart
             Dataset::default()
                 .name(self.path.file_name().and_then(|f| f.to_str()).unwrap_or(""))
                 .marker(symbols::Marker::Braille)
                 .graph_type(GraphType::Line)
                 .style(Style::default().cyan())
                 .data(data.as_slice()),
+            Dataset::default()
+                .marker(symbols::Marker::Braille)
+                .graph_type(GraphType::Line)
+                .style(Style::default().red())
+                .data(&cursor_data),
         ];
 
         // Create the X axis and define its properties
         let len = (data.len() as f64) / sample_rate;
         let x_axis = Axis::default()
-            .title("Time".red())
             .style(Style::default().white())
             .bounds([0.0, len])
             .labels(["0.0".to_string(), format!("{len}")]);
 
         // Create the Y axis and define its properties
         let y_axis = Axis::default()
-            .title("Amplitude".red())
             .style(Style::default().white())
             .bounds([-1.0, 1.0])
             .labels(["0.0", "-1.0", "1.0"]);
@@ -174,8 +186,6 @@ pub fn start(config: Config, path: std::path::PathBuf) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
-
     use super::*;
     use event::KeyCode;
     use insta::assert_snapshot;
@@ -187,19 +197,17 @@ mod tests {
 
     impl Test {
         fn new() -> Test {
-            Test::load(&[])
-        }
-
-        fn load(lines: &[&str]) -> Test {
-            let mut tmp = tempfile::NamedTempFile::new().unwrap();
-            tmp.write_all(lines.join("\n").as_bytes()).unwrap();
-            tmp.flush().unwrap();
-            let app = App::new(Config::default(), tmp.path().to_path_buf()).unwrap();
+            let tmp = tempfile::NamedTempFile::new().unwrap();
+            let app = App::new(
+                Config::default(),
+                std::path::Path::new("testdata/sine440.wav").to_path_buf(),
+            )
+            .unwrap();
             Test { app, tmp }
         }
 
         fn render(&self) -> String {
-            let mut buf = Buffer::empty(layout::Rect::new(0, 0, 32, 8));
+            let mut buf = Buffer::empty(layout::Rect::new(0, 0, 160, 20));
             self.app.render(buf.area, &mut buf);
             buf_string(&buf)
         }
@@ -236,20 +244,17 @@ mod tests {
     #[test]
     fn test_tui_render_empty() {
         let test = Test::new();
-        assert_snapshot!(test.render());
+        assert_snapshot!("load", test.render());
     }
 
     #[test]
-    fn test_tui_draw_rect() {
+    fn test_tui_move_cursor() {
         let mut test = Test::new();
 
-        // Draw one rect and confirm it
-        test.input("rsd");
-        test.key(KeyCode::Esc);
+        test.input("llll");
+        assert_snapshot!("cursor_right", test.render());
 
-        // Start drawing another rect
-        test.input("ddrsd");
-
-        assert_snapshot!(test.render());
+        test.input("hh");
+        assert_snapshot!("cursor_left", test.render());
     }
 }

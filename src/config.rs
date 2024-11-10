@@ -9,6 +9,8 @@ use serde::Deserialize;
 pub enum Action {
     Quit,
     Save,
+    CursorLeft,
+    CursorRight,
 }
 
 #[derive(Debug, Deserialize)]
@@ -37,6 +39,8 @@ impl Default for BindConfig {
                 // general
                 ("C-s".to_string(), Binding::Single(Action::Save)),
                 ("q".to_string(), Binding::Single(Action::Quit)),
+                ("h".to_string(), Binding::Single(Action::CursorLeft)),
+                ("l".to_string(), Binding::Single(Action::CursorRight)),
             ]
             .into(),
         )
