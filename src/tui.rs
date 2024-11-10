@@ -23,8 +23,8 @@ struct App {
     stream_handle: OutputStreamHandle,
     sink: Sink,
     source: Buffered<Decoder<BufReader<File>>>,
-    cursor: f64,   // position in seconds
-    playhead: f64, // position in seconds
+    cursor: Duration,
+    playhead: Duration,
     playing: bool,
 }
 
@@ -45,8 +45,8 @@ impl App {
             stream_handle,
             source,
             sink,
-            cursor: 0.0,
-            playhead: 0.0,
+            cursor: Duration::ZERO,
+            playhead: Duration::ZERO,
             exit: false,
             playing: false,
         })
@@ -75,22 +75,22 @@ impl App {
                 log::info!("TODO Save not handled");
             }
             Action::CursorLeft => {
-                self.cursor = (self.cursor - 0.01).max(0.0);
+                self.cursor = self.cursor.saturating_sub(Duration::from_millis(10));
             }
             Action::CursorRight => {
-                self.cursor = (self.cursor + 0.01).max(0.0);
+                self.cursor = self.cursor + Duration::from_millis(10);
+                if let Some(max) = self.source.total_duration() {
+                    self.cursor = self.cursor.min(max);
+                }
             }
             Action::Play => {
                 if self.playing {
                     log::debug!("Stopping playback");
                     self.sink.stop();
                 } else {
-                    self.sink.append(
-                        self.source
-                            .clone()
-                            .skip_duration(Duration::from_secs_f64(self.cursor)),
-                    );
-                    log::debug!("Starting playback");
+                    self.sink
+                        .append(self.source.clone().skip_duration(self.cursor));
+                    log::debug!("Starting playback at {:?}", self.cursor);
                 }
                 self.playing = !self.playing;
             }
@@ -100,7 +100,7 @@ impl App {
 
     fn handle_events(&mut self) -> Result<()> {
         if self.playing {
-            self.playhead = self.cursor + self.sink.get_pos().as_secs_f64();
+            self.playhead = self.cursor + self.sink.get_pos();
             if self.sink.empty() {
                 log::debug!("Done playing");
                 self.playing = false;
@@ -168,7 +168,10 @@ impl Widget for &App {
             .map(|(i, v)| ((i as f64) / sample_rate, (v as f64) / (i16::MAX as f64)))
             .collect();
 
-        let cursor_data = [(self.cursor, -1.0), (self.cursor, 1.0)];
+        let cursor_data = [
+            (self.cursor.as_secs_f64(), -1.0),
+            (self.cursor.as_secs_f64(), 1.0),
+        ];
         let mut datasets = vec![
             // wave
             Dataset::default()
@@ -185,7 +188,10 @@ impl Widget for &App {
                 .data(&cursor_data),
         ];
 
-        let playhead_data = [(self.playhead, -1.0), (self.playhead, 1.0)];
+        let playhead_data = [
+            (self.playhead.as_secs_f64(), -1.0),
+            (self.playhead.as_secs_f64(), 1.0),
+        ];
         if self.playing {
             datasets.push(
                 Dataset::default()
