@@ -1,4 +1,4 @@
-use std::{fs::File, io::BufReader};
+use std::{fs::File, io::BufReader, time::Duration};
 
 use anyhow::Result;
 
@@ -8,7 +8,7 @@ use ratatui::{
     prelude::*,
     widgets::{block::Title, Axis, Block, Chart, Dataset, GraphType},
 };
-use rodio::{source::Buffered, Decoder, OutputStream, OutputStreamHandle, Source};
+use rodio::{source::Buffered, Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 
 use crate::{
     binds::Binds,
@@ -21,8 +21,10 @@ struct App {
     path: std::path::PathBuf,
     _stream: OutputStream,
     stream_handle: OutputStreamHandle,
+    sink: Sink,
     source: Buffered<Decoder<BufReader<File>>>,
     cursor: f64, // position in seconds
+    playing: bool,
 }
 
 impl App {
@@ -33,6 +35,7 @@ impl App {
 
         let file = BufReader::new(File::open(&path)?);
         let source = Decoder::new(file)?.buffered();
+        let sink = Sink::try_new(&stream_handle)?;
 
         Ok(Self {
             path,
@@ -40,8 +43,10 @@ impl App {
             _stream: stream,
             stream_handle,
             source,
+            sink,
             cursor: 0.0,
             exit: false,
+            playing: false,
         })
     }
 
@@ -73,11 +78,31 @@ impl App {
             Action::CursorRight => {
                 self.cursor = (self.cursor + 0.01).max(0.0);
             }
+            Action::Play => {
+                if self.playing {
+                    log::debug!("Stopping playback");
+                    self.sink.stop();
+                } else {
+                    self.sink.append(self.source.clone());
+                    log::debug!("Starting playback");
+                }
+                self.playing = !self.playing;
+            }
         }
         Ok(())
     }
 
     fn handle_events(&mut self) -> Result<()> {
+        if self.playing {
+            self.cursor = self.sink.get_pos().as_secs_f64();
+            if self.sink.empty() {
+                log::debug!("Done playing");
+                self.playing = false;
+            }
+            if !event::poll(Duration::from_millis(50))? {
+                return Ok(());
+            }
+        }
         match event::read()? {
             // it's important to check that the event is a key press event as
             // crossterm also emits key release and repeat events on Windows.

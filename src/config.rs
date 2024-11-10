@@ -9,6 +9,7 @@ use serde::Deserialize;
 pub enum Action {
     Quit,
     Save,
+    Play,
     CursorLeft,
     CursorRight,
 }
@@ -41,6 +42,7 @@ impl Default for BindConfig {
                 ("q".to_string(), Binding::Single(Action::Quit)),
                 ("h".to_string(), Binding::Single(Action::CursorLeft)),
                 ("l".to_string(), Binding::Single(Action::CursorRight)),
+                ("space".to_string(), Binding::Single(Action::Play)),
             ]
             .into(),
         )

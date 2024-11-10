@@ -34,6 +34,7 @@ fn map_key(key: &str) -> Result<KeyEvent> {
             let num = num.parse()?;
             KeyCode::F(num)
         }
+        "space" => KeyCode::Char(' '),
         "backspace" => KeyCode::Backspace,
         "enter" => KeyCode::Enter,
         "left" => KeyCode::Left,
