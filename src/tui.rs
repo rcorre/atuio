@@ -23,7 +23,8 @@ struct App {
     stream_handle: OutputStreamHandle,
     sink: Sink,
     source: Buffered<Decoder<BufReader<File>>>,
-    cursor: f64, // position in seconds
+    cursor: f64,   // position in seconds
+    playhead: f64, // position in seconds
     playing: bool,
 }
 
@@ -45,6 +46,7 @@ impl App {
             source,
             sink,
             cursor: 0.0,
+            playhead: 0.0,
             exit: false,
             playing: false,
         })
@@ -83,7 +85,11 @@ impl App {
                     log::debug!("Stopping playback");
                     self.sink.stop();
                 } else {
-                    self.sink.append(self.source.clone());
+                    self.sink.append(
+                        self.source
+                            .clone()
+                            .skip_duration(Duration::from_secs_f64(self.cursor)),
+                    );
                     log::debug!("Starting playback");
                 }
                 self.playing = !self.playing;
@@ -94,7 +100,7 @@ impl App {
 
     fn handle_events(&mut self) -> Result<()> {
         if self.playing {
-            self.cursor = self.sink.get_pos().as_secs_f64();
+            self.playhead = self.cursor + self.sink.get_pos().as_secs_f64();
             if self.sink.empty() {
                 log::debug!("Done playing");
                 self.playing = false;
@@ -163,38 +169,45 @@ impl Widget for &App {
             .collect();
 
         let cursor_data = [(self.cursor, -1.0), (self.cursor, 1.0)];
-        let datasets = vec![
+        let mut datasets = vec![
+            // wave
             Dataset::default()
                 .name(self.path.file_name().and_then(|f| f.to_str()).unwrap_or(""))
                 .marker(symbols::Marker::Braille)
                 .graph_type(GraphType::Line)
                 .style(Style::default().cyan())
                 .data(data.as_slice()),
+            // cursor
             Dataset::default()
                 .marker(symbols::Marker::Braille)
                 .graph_type(GraphType::Line)
-                .style(Style::default().red())
+                .style(Style::default().white())
                 .data(&cursor_data),
         ];
 
-        // Create the X axis and define its properties
+        let playhead_data = [(self.playhead, -1.0), (self.playhead, 1.0)];
+        if self.playing {
+            datasets.push(
+                Dataset::default()
+                    .marker(symbols::Marker::Braille)
+                    .graph_type(GraphType::Line)
+                    .style(Style::default().red())
+                    .data(&playhead_data),
+            )
+        }
+
         let len = (data.len() as f64) / sample_rate;
         let x_axis = Axis::default()
             .style(Style::default().white())
             .bounds([0.0, len])
             .labels(["0.0".to_string(), format!("{len}")]);
 
-        // Create the Y axis and define its properties
         let y_axis = Axis::default()
             .style(Style::default().white())
             .bounds([-1.0, 1.0])
             .labels(["0.0", "-1.0", "1.0"]);
 
-        // Create the chart and link all the parts together
-        let chart = Chart::new(datasets)
-            .block(Block::new().title("Chart"))
-            .x_axis(x_axis)
-            .y_axis(y_axis);
+        let chart = Chart::new(datasets).x_axis(x_axis).y_axis(y_axis);
 
         chart.render(area, buf);
     }
