@@ -8,7 +8,7 @@ use ratatui::{
     prelude::*,
     widgets::{block::Title, Axis, Block, Chart, Dataset, GraphType},
 };
-use rodio::{source::Buffered, Decoder, OutputStream, OutputStreamHandle, Sink, Source};
+use rodio::{source::Buffered, Decoder, OutputStream, Sink, Source};
 
 use crate::{
     binds::Binds,
@@ -20,7 +20,6 @@ struct App {
     binds: Binds,
     path: std::path::PathBuf,
     _stream: OutputStream,
-    stream_handle: OutputStreamHandle,
     sink: Sink,
     source: Buffered<Decoder<BufReader<File>>>,
     cursor: Duration,
@@ -45,7 +44,6 @@ impl App {
             path,
             binds,
             _stream: stream,
-            stream_handle,
             source,
             sink,
             cursor: Duration::ZERO,
@@ -249,38 +247,31 @@ mod tests {
 
     struct Test {
         app: App,
-        tmp: tempfile::NamedTempFile,
     }
 
     impl Test {
         fn new() -> Test {
-            let tmp = tempfile::NamedTempFile::new().unwrap();
             let app = App::new(
                 Config::default(),
                 std::path::Path::new("testdata/sine440.wav").to_path_buf(),
             )
             .unwrap();
-            Test { app, tmp }
+            Test { app }
         }
 
         fn load(path: &str) -> Test {
-            let tmp = tempfile::NamedTempFile::new().unwrap();
             let app = App::new(
                 Config::default(),
                 std::path::Path::new("testdata").join(path).to_path_buf(),
             )
             .unwrap();
-            Test { app, tmp }
+            Test { app }
         }
 
         fn render(&self) -> String {
             let mut buf = Buffer::empty(layout::Rect::new(0, 0, 160, 20));
             self.app.render(buf.area, &mut buf);
             buf_string(&buf)
-        }
-
-        fn key(&mut self, key: KeyCode) {
-            self.app.handle_key_event(key.into()).unwrap();
         }
 
         fn input(&mut self, keys: &str) {
