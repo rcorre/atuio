@@ -25,6 +25,8 @@ struct App {
     source: Buffered<Decoder<BufReader<File>>>,
     cursor: Duration,
     playhead: Duration,
+    window_start: Duration,
+    window_end: Duration,
     playing: bool,
 }
 
@@ -47,6 +49,8 @@ impl App {
             sink,
             cursor: Duration::ZERO,
             playhead: Duration::ZERO,
+            window_start: Duration::ZERO,
+            window_end: Duration::ZERO,
             exit: false,
             playing: false,
         })
@@ -93,6 +97,12 @@ impl App {
                     log::debug!("Starting playback at {:?}", self.cursor);
                 }
                 self.playing = !self.playing;
+            }
+            Action::ZoomIn => {
+                self.window_end = self.window_end.saturating_sub(Duration::from_millis(100));
+            }
+            Action::ZoomOut => {
+                self.window_end += Duration::from_millis(100);
             }
         }
         Ok(())
@@ -202,11 +212,13 @@ impl Widget for &App {
             )
         }
 
-        let len = (data.len() as f64) / sample_rate;
         let x_axis = Axis::default()
             .style(Style::default().white())
-            .bounds([0.0, len])
-            .labels(["0.0".to_string(), format!("{len}")]);
+            .bounds([0.0, self.window_end.as_secs_f64()])
+            .labels([
+                "0.0".to_string(),
+                format!("{}", self.window_end.as_secs_f64()),
+            ]);
 
         let y_axis = Axis::default()
             .style(Style::default().white())

@@ -12,6 +12,8 @@ pub enum Action {
     Play,
     CursorLeft,
     CursorRight,
+    ZoomIn,
+    ZoomOut,
 }
 
 #[derive(Debug, Deserialize)]
@@ -43,6 +45,8 @@ impl Default for BindConfig {
                 ("h".to_string(), Binding::Single(Action::CursorLeft)),
                 ("l".to_string(), Binding::Single(Action::CursorRight)),
                 ("space".to_string(), Binding::Single(Action::Play)),
+                ("z".to_string(), Binding::Single(Action::ZoomOut)),
+                ("Z".to_string(), Binding::Single(Action::ZoomIn)),
             ]
             .into(),
         )
