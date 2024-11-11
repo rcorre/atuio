@@ -67,6 +67,19 @@ impl App {
         frame.render_widget(self, frame.area());
     }
 
+    fn slide_view_to_cursor(&mut self) {
+        if self.cursor < self.window_start {
+            let diff = self.window_start - self.cursor;
+            self.window_start -= diff;
+            self.window_end -= diff;
+        }
+        if self.cursor > self.window_end {
+            let diff = self.cursor - self.window_end;
+            self.window_start += diff;
+            self.window_end += diff;
+        }
+    }
+
     fn apply_action(&mut self, action: Action) -> Result<()> {
         log::trace!("Applying action: {action:?}");
         match action {
@@ -79,12 +92,14 @@ impl App {
             }
             Action::CursorLeft => {
                 self.cursor = self.cursor.saturating_sub(Duration::from_millis(10));
+                self.slide_view_to_cursor();
             }
             Action::CursorRight => {
                 self.cursor = self.cursor + Duration::from_millis(10);
                 if let Some(max) = self.source.total_duration() {
                     self.cursor = self.cursor.min(max);
                 }
+                self.slide_view_to_cursor();
             }
             Action::Play => {
                 if self.playing {
@@ -98,10 +113,21 @@ impl App {
                 self.playing = !self.playing;
             }
             Action::ZoomIn => {
-                self.window_end = self.window_end.saturating_sub(Duration::from_millis(100));
+                let len_millis = (self.window_end - self.window_start)
+                    .as_millis()
+                    .saturating_sub(1);
+                let scale_millis = len_millis.ilog10();
+                let zoom_amount = Duration::from_millis(10u64.pow(scale_millis));
+                self.window_end = self.window_end.saturating_sub(zoom_amount);
+                if self.window_end.is_zero() {
+                    self.window_end = Duration::from_millis(1);
+                }
             }
             Action::ZoomOut => {
-                self.window_end += Duration::from_millis(100);
+                let len_millis = (self.window_end - self.window_start).as_millis();
+                let scale_millis = len_millis.ilog10();
+                let zoom_amount = Duration::from_millis(10u64.pow(scale_millis));
+                self.window_end += zoom_amount;
             }
         }
         Ok(())
@@ -170,11 +196,21 @@ impl Widget for &App {
         block.render(area, buf);
 
         let sample_rate = self.source.sample_rate() as f64;
+        let start_secs = self.window_start.as_secs_f64();
+        let end_secs = self.window_end.as_secs_f64();
+
         let data: Vec<_> = self
             .source
             .clone()
+            .skip_duration(self.window_start)
+            .take_duration(self.window_end - self.window_start)
             .enumerate()
-            .map(|(i, v)| ((i as f64) / sample_rate, (v as f64) / (i16::MAX as f64)))
+            .map(|(i, v)| {
+                (
+                    ((i as f64) / sample_rate) + start_secs,
+                    (v as f64) / (i16::MAX as f64),
+                )
+            })
             .collect();
 
         let cursor_data = [
@@ -213,11 +249,8 @@ impl Widget for &App {
 
         let x_axis = Axis::default()
             .style(Style::default().white())
-            .bounds([0.0, self.window_end.as_secs_f64()])
-            .labels([
-                "0.0".to_string(),
-                format!("{}", self.window_end.as_secs_f64()),
-            ]);
+            .bounds([start_secs, end_secs])
+            .labels([format!("{start_secs}s"), format!("{end_secs}s")]);
 
         let y_axis = Axis::default()
             .style(Style::default().white())
@@ -250,15 +283,6 @@ mod tests {
     }
 
     impl Test {
-        fn new() -> Test {
-            let app = App::new(
-                Config::default(),
-                std::path::Path::new("testdata/sine440.wav").to_path_buf(),
-            )
-            .unwrap();
-            Test { app }
-        }
-
         fn load(path: &str) -> Test {
             let app = App::new(
                 Config::default(),
@@ -301,13 +325,13 @@ mod tests {
 
     #[test]
     fn test_tui_render_empty() {
-        let test = Test::new();
+        let test = Test::load("sine440fade.wav");
         assert_snapshot!("load", test.render());
     }
 
     #[test]
     fn test_tui_move_cursor() {
-        let mut test = Test::new();
+        let mut test = Test::load("sine440fade.wav");
 
         test.input("llll");
         assert_snapshot!("cursor_right", test.render());
@@ -320,12 +344,36 @@ mod tests {
     fn test_tui_zoom() {
         let mut test = Test::load("sine440fade.wav");
 
-        assert_snapshot!("zoom_start", test.render());
+        let zoom0 = test.render();
+        assert_snapshot!("zoom0", zoom0);
 
-        test.input("zz");
-        assert_snapshot!("zoom_in", test.render());
+        test.input("z");
+        let zoom1 = test.render();
+        assert_snapshot!("zoom1", zoom1);
+
+        test.input("z");
+        let zoom2 = test.render();
+        assert_snapshot!("zoom2", zoom2);
+
+        test.input(&"z".repeat(8));
+        let zoom10 = test.render();
+        assert_snapshot!("zoom10", zoom10);
+
+        // scroll past the right bound to scroll the view
+        test.input(&"l".repeat(6));
+        assert_snapshot!("zoom10right", test.render());
+
+        // should scroll back to where we were
+        test.input(&"h".repeat(6));
+        assert_eq!(zoom10, test.render());
+
+        test.input(&"Z".repeat(8));
+        assert_eq!(zoom2, test.render());
 
         test.input("Z");
-        assert_snapshot!("zoom_out", test.render());
+        assert_eq!(zoom1, test.render());
+
+        test.input("Z");
+        assert_eq!(zoom0, test.render());
     }
 }
