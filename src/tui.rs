@@ -39,6 +39,7 @@ impl App {
         let file = BufReader::new(File::open(&path)?);
         let source = Decoder::new(file)?.buffered();
         let sink = Sink::try_new(&stream_handle)?;
+        let window_end = source.total_duration().unwrap_or(Duration::from_secs(1));
 
         Ok(Self {
             path,
@@ -50,7 +51,7 @@ impl App {
             cursor: Duration::ZERO,
             playhead: Duration::ZERO,
             window_start: Duration::ZERO,
-            window_end: Duration::ZERO,
+            window_end,
             exit: false,
             playing: false,
         })
@@ -262,6 +263,16 @@ mod tests {
             Test { app, tmp }
         }
 
+        fn load(path: &str) -> Test {
+            let tmp = tempfile::NamedTempFile::new().unwrap();
+            let app = App::new(
+                Config::default(),
+                std::path::Path::new("testdata").join(path).to_path_buf(),
+            )
+            .unwrap();
+            Test { app, tmp }
+        }
+
         fn render(&self) -> String {
             let mut buf = Buffer::empty(layout::Rect::new(0, 0, 160, 20));
             self.app.render(buf.area, &mut buf);
@@ -312,5 +323,18 @@ mod tests {
 
         test.input("hh");
         assert_snapshot!("cursor_left", test.render());
+    }
+
+    #[test]
+    fn test_tui_zoom() {
+        let mut test = Test::load("sine440fade.wav");
+
+        assert_snapshot!("zoom_start", test.render());
+
+        test.input("zz");
+        assert_snapshot!("zoom_in", test.render());
+
+        test.input("Z");
+        assert_snapshot!("zoom_out", test.render());
     }
 }
