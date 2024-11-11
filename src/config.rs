@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 use serde::Deserialize;
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Copy, Clone, Debug, Deserialize)]
 #[cfg_attr(test, derive(PartialEq))]
 #[serde(rename_all = "snake_case")]
 pub enum Action {
@@ -22,6 +22,7 @@ pub enum Action {
 pub enum Binding {
     Single(Action),
     Multi(Vec<Action>),
+    Chain(HashMap<String, Binding>),
 }
 
 #[derive(Debug, Deserialize)]

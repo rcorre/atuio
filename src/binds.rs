@@ -3,22 +3,65 @@ use std::collections::HashMap;
 use anyhow::{bail, Result};
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
 
-use crate::config::{self, Binding};
+use crate::config::{self, Action};
+
+#[derive(Debug)]
+pub enum Binding {
+    Action(Vec<Action>),
+    Chain(HashMap<KeyEvent, Binding>),
+}
 
 #[derive(Default, Debug)]
-pub struct Binds(HashMap<KeyEvent, Binding>);
+pub struct Binds {
+    map: HashMap<KeyEvent, Binding>,
+    keys: Vec<KeyEvent>,
+}
+
+fn to_bind(b: config::Binding) -> Result<Binding> {
+    match b {
+        config::Binding::Single(a) => Ok(Binding::Action(vec![a])),
+        config::Binding::Multi(a) => Ok(Binding::Action(a)),
+        config::Binding::Chain(c) => {
+            let mut res = HashMap::new();
+            for (key, bind) in c {
+                let key = map_key(&key)?;
+                let bind = to_bind(bind)?;
+                res.insert(key, bind);
+            }
+            Ok(Binding::Chain(res))
+        }
+    }
+}
 
 impl Binds {
-    pub fn get(&self, ev: &KeyEvent) -> Option<&Binding> {
-        self.0.get(&ev)
+    pub fn apply(&mut self, key: KeyEvent) -> Option<&Vec<Action>> {
+        let mut bound = &self.map;
+        self.keys.push(key);
+        for k in &self.keys {
+            bound = match bound.get(&k) {
+                Some(Binding::Chain(c)) => &c,
+                Some(Binding::Action(a)) => {
+                    log::trace!("{:?} bound to: {a:?}", self.keys);
+                    self.keys.clear();
+                    return Some(a);
+                }
+                None => {
+                    log::trace!("{:?} bound to nothing", self.keys);
+                    self.keys.clear();
+                    return None;
+                }
+            }
+        }
+        log::trace!("key chain: {:?}", self.keys);
+        None
     }
 
     pub fn from_config(c: config::BindConfig) -> Result<Self> {
-        let mut m = HashMap::new();
+        let mut map = HashMap::new();
         for (k, v) in c.0.into_iter() {
-            m.insert(map_key(&k)?, v);
+            map.insert(map_key(&k)?, to_bind(v)?);
         }
-        Ok(Self(m))
+        Ok(Self { map, keys: vec![] })
     }
 }
 

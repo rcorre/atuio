@@ -156,19 +156,13 @@ impl App {
     }
 
     fn handle_key_event(&mut self, key: KeyEvent) -> Result<()> {
-        let Some(bound) = self.binds.get(&key) else {
+        let Some(actions) = self.binds.apply(key) else {
             log::trace!("Mapped key to no action");
             return Ok(());
         };
-        log::trace!("Mapped key to {bound:?}");
-
-        match bound {
-            crate::config::Binding::Single(s) => self.apply_action(s.clone())?,
-            crate::config::Binding::Multi(m) => {
-                for action in m.clone() {
-                    self.apply_action(action)?;
-                }
-            }
+        log::trace!("Mapped key to {actions:?}");
+        for action in actions.clone() {
+            self.apply_action(action)?;
         }
         Ok(())
     }
