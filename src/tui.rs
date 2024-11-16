@@ -17,7 +17,7 @@ use crate::{
 
 struct App {
     exit: bool,
-    binds: Binds,
+    binds: Binds<Action>,
     path: std::path::PathBuf,
     _stream: OutputStream,
     sink: Sink,
@@ -31,7 +31,7 @@ struct App {
 
 impl App {
     fn new(config: Config, path: std::path::PathBuf) -> Result<Self> {
-        let binds = Binds::from_config(config.binds)?;
+        let binds = Binds::new(config.binds);
         log::trace!("Using binds: {binds:#?}");
         let (stream, stream_handle) = OutputStream::try_default()?;
 
