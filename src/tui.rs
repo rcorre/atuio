@@ -101,6 +101,16 @@ impl App {
                 }
                 self.slide_view_to_cursor();
             }
+            Action::CursorStart => {
+                self.cursor = Duration::ZERO;
+                self.slide_view_to_cursor();
+            }
+            Action::CursorEnd => {
+                if let Some(end) = self.source.total_duration() {
+                    self.cursor = end;
+                    self.slide_view_to_cursor();
+                }
+            }
             Action::Play => {
                 if self.playing {
                     log::debug!("Stopping playback");
@@ -332,6 +342,12 @@ mod tests {
 
         test.input("hh");
         assert_snapshot!("cursor_left", test.render());
+
+        test.input("gl");
+        assert_snapshot!("cursor_end", test.render());
+
+        test.input("gs");
+        assert_snapshot!("cursor_start", test.render());
     }
 
     #[test]

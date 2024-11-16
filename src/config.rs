@@ -13,6 +13,8 @@ pub enum Action {
     Play,
     CursorLeft,
     CursorRight,
+    CursorStart,
+    CursorEnd,
     ZoomIn,
     ZoomOut,
 }
@@ -55,6 +57,20 @@ impl Default for Config {
                 (
                     KeyEvent::new(KeyCode::Char('Z'), KeyModifiers::empty()),
                     Binding::Action(vec![Action::ZoomOut]),
+                ),
+                // g navigation chains
+                (
+                    KeyEvent::new(KeyCode::Char('g'), KeyModifiers::empty()),
+                    Binding::Chain(BindMap::new([
+                        (
+                            KeyEvent::new(KeyCode::Char('s'), KeyModifiers::empty()),
+                            Binding::Action(vec![Action::CursorStart]),
+                        ),
+                        (
+                            KeyEvent::new(KeyCode::Char('l'), KeyModifiers::empty()),
+                            Binding::Action(vec![Action::CursorEnd]),
+                        ),
+                    ])),
                 ),
             ]),
         }
