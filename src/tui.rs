@@ -27,6 +27,7 @@ struct App {
     window_start: Duration,
     window_end: Duration,
     playing: bool,
+    selection: Option<(Duration, Duration)>,
 }
 
 impl App {
@@ -52,6 +53,7 @@ impl App {
             window_end,
             exit: false,
             playing: false,
+            selection: None,
         })
     }
 
@@ -67,7 +69,13 @@ impl App {
         frame.render_widget(self, frame.area());
     }
 
-    fn slide_view_to_cursor(&mut self) {
+    fn move_cursor_to(&mut self, pos: Duration) {
+        self.cursor = pos.clamp(
+            Duration::ZERO,
+            self.source.total_duration().unwrap_or(Duration::MAX),
+        );
+        log::debug!("Moved cursor to: {:?}", self.cursor);
+
         if self.cursor < self.window_start {
             let diff = self.window_start - self.cursor;
             self.window_start -= diff;
@@ -77,6 +85,15 @@ impl App {
             let diff = self.cursor - self.window_end;
             self.window_start += diff;
             self.window_end += diff;
+        }
+        log::debug!(
+            "Moved window to: ({:?}, {:?})",
+            self.window_start,
+            self.window_end
+        );
+
+        if let Some(selection) = &mut self.selection {
+            selection.1 = self.cursor;
         }
     }
 
@@ -91,24 +108,17 @@ impl App {
                 log::info!("TODO Save not handled");
             }
             Action::CursorLeft => {
-                self.cursor = self.cursor.saturating_sub(Duration::from_millis(10));
-                self.slide_view_to_cursor();
+                self.move_cursor_to(self.cursor.saturating_sub(Duration::from_millis(10)));
             }
             Action::CursorRight => {
-                self.cursor = self.cursor + Duration::from_millis(10);
-                if let Some(max) = self.source.total_duration() {
-                    self.cursor = self.cursor.min(max);
-                }
-                self.slide_view_to_cursor();
+                self.move_cursor_to(self.cursor.saturating_add(Duration::from_millis(10)));
             }
             Action::CursorStart => {
-                self.cursor = Duration::ZERO;
-                self.slide_view_to_cursor();
+                self.move_cursor_to(Duration::ZERO);
             }
             Action::CursorEnd => {
                 if let Some(end) = self.source.total_duration() {
-                    self.cursor = end;
-                    self.slide_view_to_cursor();
+                    self.move_cursor_to(end);
                 }
             }
             Action::Play => {
@@ -139,6 +149,16 @@ impl App {
                 let zoom_amount = Duration::from_millis(10u64.pow(scale_millis));
                 self.window_end += zoom_amount;
             }
+            Action::Select => match self.selection {
+                Some(_) => {
+                    log::debug!("Ending selection");
+                    self.selection = None
+                }
+                None => {
+                    log::debug!("Started selection");
+                    self.selection = Some((self.cursor, self.cursor))
+                }
+            },
         }
         Ok(())
     }
@@ -236,6 +256,38 @@ impl Widget for &App {
                 .style(Style::default().white())
                 .data(&cursor_data),
         ];
+
+        let selection_data = if let Some(selection) = self.selection {
+            (
+                [
+                    (selection.0.as_secs_f64(), -1.0),
+                    (selection.0.as_secs_f64(), 1.0),
+                ],
+                [
+                    (selection.1.as_secs_f64(), -1.0),
+                    (selection.1.as_secs_f64(), 1.0),
+                ],
+            )
+        } else {
+            ([(0.0, 0.0); 2], [(0.0, 0.0); 2])
+        };
+
+        if self.selection.is_some() {
+            datasets.push(
+                Dataset::default()
+                    .marker(symbols::Marker::Braille)
+                    .graph_type(GraphType::Line)
+                    .style(Style::default().green())
+                    .data(&selection_data.0),
+            );
+            datasets.push(
+                Dataset::default()
+                    .marker(symbols::Marker::Braille)
+                    .graph_type(GraphType::Line)
+                    .style(Style::default().green())
+                    .data(&selection_data.1),
+            )
+        }
 
         let playhead_data = [
             (self.playhead.as_secs_f64(), -1.0),
