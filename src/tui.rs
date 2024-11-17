@@ -223,7 +223,7 @@ impl Widget for &App {
         let start_secs = self.window_start.as_secs_f64();
         let end_secs = self.window_end.as_secs_f64();
 
-        let data: Vec<_> = self
+        let wave_data: Vec<_> = self
             .source
             .clone()
             .skip_duration(self.window_start)
@@ -237,6 +237,26 @@ impl Widget for &App {
             })
             .collect();
 
+        let selected_data: Vec<_> = match self.selection {
+            Some((start, end)) => {
+                let start = start.max(self.window_start);
+                let end = end.min(self.window_end);
+                self.source
+                    .clone()
+                    .skip_duration(start)
+                    .take_duration(end - start)
+                    .enumerate()
+                    .map(|(i, v)| {
+                        (
+                            ((i as f64) / sample_rate) + start.as_secs_f64(),
+                            (v as f64) / (i16::MAX as f64),
+                        )
+                    })
+                    .collect()
+            }
+            None => vec![],
+        };
+
         let cursor_data = [
             (self.cursor.as_secs_f64(), -1.0),
             (self.cursor.as_secs_f64(), 1.0),
@@ -248,7 +268,13 @@ impl Widget for &App {
                 .marker(symbols::Marker::Braille)
                 .graph_type(GraphType::Line)
                 .style(Style::default().cyan())
-                .data(data.as_slice()),
+                .data(wave_data.as_slice()),
+            // selected
+            Dataset::default()
+                .marker(symbols::Marker::Braille)
+                .graph_type(GraphType::Line)
+                .style(Style::default().green())
+                .data(selected_data.as_slice()),
             // cursor
             Dataset::default()
                 .marker(symbols::Marker::Braille)
@@ -437,5 +463,12 @@ mod tests {
 
         test.input("Z");
         assert_eq!(zoom0, test.render());
+    }
+
+    #[test]
+    fn test_tui_select() {
+        let mut test = Test::load("sine440fade.wav");
+        test.input("llllvlll");
+        assert_snapshot!(test.render());
     }
 }
