@@ -27,6 +27,7 @@ struct App {
     window_start: Duration,
     window_end: Duration,
     playing: bool,
+    // The selection (initial, current). Current can be less than initial.
     selection: Option<(Duration, Duration)>,
 }
 
@@ -196,6 +197,14 @@ impl App {
         }
         Ok(())
     }
+
+    // Returns the selection such that the first element is always the earliest.
+    fn normalize_selection(&self) -> Option<(Duration, Duration)> {
+        match self.selection {
+            Some(s) => Some((s.0.min(s.1), s.0.max(s.1))),
+            None => None,
+        }
+    }
 }
 
 impl Widget for &App {
@@ -237,7 +246,8 @@ impl Widget for &App {
             })
             .collect();
 
-        let selected_data: Vec<_> = match self.selection {
+        let selection = self.normalize_selection();
+        let selected_data: Vec<_> = match selection {
             Some((start, end)) => {
                 let start = start.max(self.window_start);
                 let end = end.min(self.window_end);
@@ -283,7 +293,7 @@ impl Widget for &App {
                 .data(&cursor_data),
         ];
 
-        let selection_data = if let Some(selection) = self.selection {
+        let selection_data = if let Some(selection) = selection {
             (
                 [
                     (selection.0.as_secs_f64(), -1.0),
@@ -469,6 +479,8 @@ mod tests {
     fn test_tui_select() {
         let mut test = Test::load("sine440fade.wav");
         test.input("llllvlll");
-        assert_snapshot!(test.render());
+        assert_snapshot!("select_forward", test.render());
+        test.input("hhhhhh");
+        assert_snapshot!("select_backward", test.render());
     }
 }
