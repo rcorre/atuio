@@ -8,7 +8,7 @@ use ratatui::{
     prelude::*,
     widgets::{block::Title, Axis, Block, Chart, Dataset, GraphType},
 };
-use rodio::{source::Buffered, Decoder, OutputStream, Sink, Source};
+use rodio::{buffer::SamplesBuffer, Decoder, OutputStream, Sink, Source};
 
 use crate::{
     binds::Binds,
@@ -21,7 +21,7 @@ struct App {
     path: std::path::PathBuf,
     _stream: OutputStream,
     sink: Sink,
-    source: Buffered<Decoder<BufReader<File>>>,
+    source: SamplesBuffer<f32>,
     cursor: Duration,
     playhead: Duration,
     window_start: Duration,
@@ -38,9 +38,14 @@ impl App {
         let (stream, stream_handle) = OutputStream::try_default()?;
 
         let file = BufReader::new(File::open(&path)?);
-        let source = Decoder::new(file)?.buffered();
+        let source = Decoder::new(file)?;
         let sink = Sink::try_new(&stream_handle)?;
         let window_end = source.total_duration().unwrap_or(Duration::from_secs(1));
+        let source = SamplesBuffer::new(
+            source.channels(),
+            source.sample_rate(),
+            source.convert_samples().collect::<Vec<_>>(),
+        );
 
         Ok(Self {
             path,
@@ -238,12 +243,7 @@ impl Widget for &App {
             .skip_duration(self.window_start)
             .take_duration(self.window_end - self.window_start)
             .enumerate()
-            .map(|(i, v)| {
-                (
-                    ((i as f64) / sample_rate) + start_secs,
-                    (v as f64) / (i16::MAX as f64),
-                )
-            })
+            .map(|(i, v)| (((i as f64) / sample_rate) + start_secs, v as f64))
             .collect();
 
         let selection = self.normalize_selection();
@@ -256,12 +256,7 @@ impl Widget for &App {
                     .skip_duration(start)
                     .take_duration(end - start)
                     .enumerate()
-                    .map(|(i, v)| {
-                        (
-                            ((i as f64) / sample_rate) + start.as_secs_f64(),
-                            (v as f64) / (i16::MAX as f64),
-                        )
-                    })
+                    .map(|(i, v)| (((i as f64) / sample_rate) + start.as_secs_f64(), v as f64))
                     .collect()
             }
             None => vec![],
