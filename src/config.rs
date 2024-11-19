@@ -19,6 +19,7 @@ pub enum Action {
     ZoomOut,
     Select,
     SelectAll,
+    Amplify,
 }
 
 #[derive(Debug, Deserialize)]
@@ -67,6 +68,10 @@ impl Default for Config {
                 (
                     KeyEvent::new(KeyCode::Char('%'), KeyModifiers::empty()),
                     Binding::Action(vec![Action::SelectAll]),
+                ),
+                (
+                    KeyEvent::new(KeyCode::Char('a'), KeyModifiers::empty()),
+                    Binding::Action(vec![Action::Amplify]),
                 ),
                 // g navigation chains
                 (

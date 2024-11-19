@@ -180,6 +180,29 @@ impl App {
                     self.selection = Some((Duration::ZERO, end));
                 }
             },
+            Action::Amplify => match self.normalize_selection() {
+                Some((start, end)) => {
+                    let amount = 0.1;
+                    log::debug!("Amplifying selection ({start:?}, {end:?}) by {amount}");
+                    let source =
+                        std::mem::replace(&mut self.source, SamplesBuffer::new(1, 1, vec![]))
+                            .buffered();
+                    let channels = source.channels();
+                    let sample_rate = source.sample_rate();
+                    let before = source.clone().take_duration(start);
+                    let selected = source
+                        .clone()
+                        .skip_duration(start)
+                        .take_duration(end - start);
+                    let after = source.skip_duration(end);
+                    let new = before.chain(selected.amplify(amount)).chain(after);
+                    self.source =
+                        SamplesBuffer::new(channels, sample_rate, new.collect::<Vec<_>>());
+                }
+                None => {
+                    log::debug!("Cannot apply effect without selection");
+                }
+            },
         }
         Ok(())
     }
@@ -499,5 +522,12 @@ mod tests {
         let mut test = Test::load("sine440fade.wav");
         test.input("%");
         assert_snapshot!("select_all", test.render());
+    }
+
+    #[test]
+    fn test_tui_amplify() {
+        let mut test = Test::load("sine440fade.wav");
+        test.input("llllvllla");
+        assert_snapshot!("amplify", test.render());
     }
 }
