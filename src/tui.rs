@@ -165,6 +165,21 @@ impl App {
                     self.selection = Some((self.cursor, self.cursor))
                 }
             },
+            Action::SelectAll => match self.selection {
+                Some((start, end))
+                    if start.is_zero()
+                        && end >= self.source.total_duration().unwrap_or_default() =>
+                {
+                    log::debug!("Ending selection");
+                    self.selection = None;
+                }
+                _ => {
+                    log::debug!("Selected all");
+                    let end = self.source.total_duration().unwrap_or_default();
+                    self.move_cursor_to(end);
+                    self.selection = Some((Duration::ZERO, end));
+                }
+            },
         }
         Ok(())
     }
@@ -477,5 +492,12 @@ mod tests {
         assert_snapshot!("select_forward", test.render());
         test.input("hhhhhh");
         assert_snapshot!("select_backward", test.render());
+    }
+
+    #[test]
+    fn test_tui_select_all() {
+        let mut test = Test::load("sine440fade.wav");
+        test.input("%");
+        assert_snapshot!("select_all", test.render());
     }
 }
