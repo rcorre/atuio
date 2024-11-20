@@ -31,68 +31,30 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
+        let key = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::empty());
         Self {
             binds: BindMap::new([
                 // general
-                (
-                    KeyEvent::new(KeyCode::Char('s'), KeyModifiers::SHIFT),
-                    Binding::Action(vec![Action::Save]),
-                ),
-                (
-                    KeyEvent::new(KeyCode::Char('q'), KeyModifiers::empty()),
-                    Binding::Action(vec![Action::Quit]),
-                ),
-                (
-                    KeyEvent::new(KeyCode::Char('h'), KeyModifiers::empty()),
-                    Binding::Action(vec![Action::CursorLeft]),
-                ),
-                (
-                    KeyEvent::new(KeyCode::Char('l'), KeyModifiers::empty()),
-                    Binding::Action(vec![Action::CursorRight]),
-                ),
-                (
-                    KeyEvent::new(KeyCode::Char(' '), KeyModifiers::empty()),
-                    Binding::Action(vec![Action::Play]),
-                ),
+                (key('s'), Binding::Action(vec![Action::Save])),
+                (key('q'), Binding::Action(vec![Action::Quit])),
+                (key('h'), Binding::Action(vec![Action::CursorLeft])),
+                (key('l'), Binding::Action(vec![Action::CursorRight])),
+                (key(' '), Binding::Action(vec![Action::Play])),
                 // zoom
-                (
-                    KeyEvent::new(KeyCode::Char('z'), KeyModifiers::empty()),
-                    Binding::Action(vec![Action::ZoomIn]),
-                ),
-                (
-                    KeyEvent::new(KeyCode::Char('Z'), KeyModifiers::empty()),
-                    Binding::Action(vec![Action::ZoomOut]),
-                ),
+                (key('z'), Binding::Action(vec![Action::ZoomIn])),
+                (key('Z'), Binding::Action(vec![Action::ZoomOut])),
                 // selection
-                (
-                    KeyEvent::new(KeyCode::Char('v'), KeyModifiers::empty()),
-                    Binding::Action(vec![Action::Select]),
-                ),
-                (
-                    KeyEvent::new(KeyCode::Char('%'), KeyModifiers::empty()),
-                    Binding::Action(vec![Action::SelectAll]),
-                ),
+                (key('v'), Binding::Action(vec![Action::Select])),
+                (key('%'), Binding::Action(vec![Action::SelectAll])),
                 // editing
-                (
-                    KeyEvent::new(KeyCode::Char('a'), KeyModifiers::empty()),
-                    Binding::Action(vec![Action::Amplify]),
-                ),
-                (
-                    KeyEvent::new(KeyCode::Char('x'), KeyModifiers::empty()),
-                    Binding::Action(vec![Action::Cut]),
-                ),
+                (key('a'), Binding::Action(vec![Action::Amplify])),
+                (key('x'), Binding::Action(vec![Action::Cut])),
                 // g navigation chains
                 (
-                    KeyEvent::new(KeyCode::Char('g'), KeyModifiers::empty()),
+                    key('g'),
                     Binding::Chain(BindMap::new([
-                        (
-                            KeyEvent::new(KeyCode::Char('s'), KeyModifiers::empty()),
-                            Binding::Action(vec![Action::CursorStart]),
-                        ),
-                        (
-                            KeyEvent::new(KeyCode::Char('l'), KeyModifiers::empty()),
-                            Binding::Action(vec![Action::CursorEnd]),
-                        ),
+                        (key('s'), Binding::Action(vec![Action::CursorStart])),
+                        (key('l'), Binding::Action(vec![Action::CursorEnd])),
                     ])),
                 ),
             ]),
