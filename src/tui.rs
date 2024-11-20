@@ -203,6 +203,26 @@ impl App {
                     log::debug!("Cannot apply effect without selection");
                 }
             },
+            Action::Cut => match self.normalize_selection() {
+                Some((start, end)) => {
+                    log::debug!("Cutting selection ({start:?}, {end:?})");
+                    let source =
+                        std::mem::replace(&mut self.source, SamplesBuffer::new(1, 1, vec![]))
+                            .buffered();
+                    let channels = source.channels();
+                    let sample_rate = source.sample_rate();
+                    let before = source.clone().take_duration(start);
+                    let after = source.skip_duration(end);
+                    let new = before.chain(after);
+                    self.source =
+                        SamplesBuffer::new(channels, sample_rate, new.collect::<Vec<_>>());
+                    self.selection = None;
+                    self.move_cursor_to(start);
+                }
+                None => {
+                    log::debug!("Cannot apply effect without selection");
+                }
+            },
         }
         Ok(())
     }
@@ -529,5 +549,12 @@ mod tests {
         let mut test = Test::load("sine440fade.wav");
         test.input("llllvllla");
         assert_snapshot!("amplify", test.render());
+    }
+
+    #[test]
+    fn test_tui_cut() {
+        let mut test = Test::load("sine440fade.wav");
+        test.input("llllvllllllllllllx");
+        assert_snapshot!("cut", test.render());
     }
 }

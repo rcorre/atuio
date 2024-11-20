@@ -20,6 +20,7 @@ pub enum Action {
     Select,
     SelectAll,
     Amplify,
+    Cut,
 }
 
 #[derive(Debug, Deserialize)]
@@ -53,6 +54,7 @@ impl Default for Config {
                     KeyEvent::new(KeyCode::Char(' '), KeyModifiers::empty()),
                     Binding::Action(vec![Action::Play]),
                 ),
+                // zoom
                 (
                     KeyEvent::new(KeyCode::Char('z'), KeyModifiers::empty()),
                     Binding::Action(vec![Action::ZoomIn]),
@@ -61,6 +63,7 @@ impl Default for Config {
                     KeyEvent::new(KeyCode::Char('Z'), KeyModifiers::empty()),
                     Binding::Action(vec![Action::ZoomOut]),
                 ),
+                // selection
                 (
                     KeyEvent::new(KeyCode::Char('v'), KeyModifiers::empty()),
                     Binding::Action(vec![Action::Select]),
@@ -69,9 +72,14 @@ impl Default for Config {
                     KeyEvent::new(KeyCode::Char('%'), KeyModifiers::empty()),
                     Binding::Action(vec![Action::SelectAll]),
                 ),
+                // editing
                 (
                     KeyEvent::new(KeyCode::Char('a'), KeyModifiers::empty()),
                     Binding::Action(vec![Action::Amplify]),
+                ),
+                (
+                    KeyEvent::new(KeyCode::Char('x'), KeyModifiers::empty()),
+                    Binding::Action(vec![Action::Cut]),
                 ),
                 // g navigation chains
                 (
