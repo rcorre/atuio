@@ -15,6 +15,27 @@ use crate::{
     config::{Action, Config},
 };
 
+struct Selection {
+    start: Duration,
+    end: Duration,
+}
+
+impl Selection {
+    fn new(start: Duration) -> Self {
+        Self { start, end: start }
+    }
+
+    // Returns the selection such that the first element is always the earliest.
+    fn normalize(&self) -> (Duration, Duration) {
+        (self.start.min(self.end), self.start.max(self.end))
+    }
+}
+
+enum Mode {
+    Normal,
+    Select(Selection),
+}
+
 struct App {
     exit: bool,
     binds: Binds<Action>,
@@ -27,8 +48,7 @@ struct App {
     window_start: Duration,
     window_end: Duration,
     playing: bool,
-    // The selection (initial, current). Current can be less than initial.
-    selection: Option<(Duration, Duration)>,
+    mode: Mode,
 }
 
 impl App {
@@ -59,7 +79,7 @@ impl App {
             window_end,
             exit: false,
             playing: false,
-            selection: None,
+            mode: Mode::Normal,
         })
     }
 
@@ -98,8 +118,9 @@ impl App {
             self.window_end
         );
 
-        if let Some(selection) = &mut self.selection {
-            selection.1 = self.cursor;
+        match &mut self.mode {
+            Mode::Normal => {}
+            Mode::Select(sel) => sel.start = self.cursor,
         }
     }
 
@@ -155,33 +176,37 @@ impl App {
                 let zoom_amount = Duration::from_millis(10u64.pow(scale_millis));
                 self.window_end += zoom_amount;
             }
-            Action::Select => match self.selection {
-                Some(_) => {
+            Action::Select => match self.mode {
+                Mode::Select(_) => {
                     log::debug!("Ending selection");
-                    self.selection = None
+                    self.mode = Mode::Normal
                 }
-                None => {
+                Mode::Normal => {
                     log::debug!("Started selection");
-                    self.selection = Some((self.cursor, self.cursor))
+                    self.mode = Mode::Select(Selection::new(self.cursor))
                 }
             },
-            Action::SelectAll => match self.selection {
-                Some((start, end))
+            Action::SelectAll => match self.mode {
+                Mode::Select(Selection { start, end })
                     if start.is_zero()
                         && end >= self.source.total_duration().unwrap_or_default() =>
                 {
                     log::debug!("Ending selection");
-                    self.selection = None;
+                    self.mode = Mode::Normal;
                 }
                 _ => {
                     log::debug!("Selected all");
                     let end = self.source.total_duration().unwrap_or_default();
                     self.move_cursor_to(end);
-                    self.selection = Some((Duration::ZERO, end));
+                    self.mode = Mode::Select(Selection {
+                        start: Duration::ZERO,
+                        end,
+                    });
                 }
             },
-            Action::Amplify => match self.normalize_selection() {
-                Some((start, end)) => {
+            Action::Amplify => match &self.mode {
+                Mode::Select(sel) => {
+                    let (start, end) = sel.normalize();
                     let amount = 0.1;
                     log::debug!("Amplifying selection ({start:?}, {end:?}) by {amount}");
                     let source =
@@ -199,12 +224,13 @@ impl App {
                     self.source =
                         SamplesBuffer::new(channels, sample_rate, new.collect::<Vec<_>>());
                 }
-                None => {
+                Mode::Normal => {
                     log::debug!("Cannot apply effect without selection");
                 }
             },
-            Action::Cut => match self.normalize_selection() {
-                Some((start, end)) => {
+            Action::Cut => match &self.mode {
+                Mode::Select(sel) => {
+                    let (start, end) = sel.normalize();
                     log::debug!("Cutting selection ({start:?}, {end:?})");
                     let source =
                         std::mem::replace(&mut self.source, SamplesBuffer::new(1, 1, vec![]))
@@ -216,10 +242,10 @@ impl App {
                     let new = before.chain(after);
                     self.source =
                         SamplesBuffer::new(channels, sample_rate, new.collect::<Vec<_>>());
-                    self.selection = None;
+                    self.mode = Mode::Normal;
                     self.move_cursor_to(start);
                 }
-                None => {
+                Mode::Normal => {
                     log::debug!("Cannot apply effect without selection");
                 }
             },
@@ -260,14 +286,6 @@ impl App {
         }
         Ok(())
     }
-
-    // Returns the selection such that the first element is always the earliest.
-    fn normalize_selection(&self) -> Option<(Duration, Duration)> {
-        match self.selection {
-            Some(s) => Some((s.0.min(s.1), s.0.max(s.1))),
-            None => None,
-        }
-    }
 }
 
 impl Widget for &App {
@@ -304,9 +322,9 @@ impl Widget for &App {
             .map(|(i, v)| (((i as f64) / sample_rate) + start_secs, v as f64))
             .collect();
 
-        let selection = self.normalize_selection();
-        let selected_data: Vec<_> = match selection {
-            Some((start, end)) => {
+        let selected_data: Vec<_> = match &self.mode {
+            Mode::Select(sel) => {
+                let (start, end) = sel.normalize();
                 let start = start.max(self.window_start);
                 let end = end.min(self.window_end);
                 self.source
@@ -317,7 +335,7 @@ impl Widget for &App {
                     .map(|(i, v)| (((i as f64) / sample_rate) + start.as_secs_f64(), v as f64))
                     .collect()
             }
-            None => vec![],
+            Mode::Normal => vec![],
         };
 
         let cursor_data = [
@@ -346,36 +364,32 @@ impl Widget for &App {
                 .data(&cursor_data),
         ];
 
-        let selection_data = if let Some(selection) = selection {
-            (
-                [
-                    (selection.0.as_secs_f64(), -1.0),
-                    (selection.0.as_secs_f64(), 1.0),
-                ],
-                [
-                    (selection.1.as_secs_f64(), -1.0),
-                    (selection.1.as_secs_f64(), 1.0),
-                ],
-            )
-        } else {
-            ([(0.0, 0.0); 2], [(0.0, 0.0); 2])
+        let selection_data = match self.mode {
+            Mode::Select(Selection { start, end }) => (
+                [(start.as_secs_f64(), -1.0), (start.as_secs_f64(), 1.0)],
+                [(end.as_secs_f64(), -1.0), (end.as_secs_f64(), 1.0)],
+            ),
+            Mode::Normal => ([(0.0, 0.0); 2], [(0.0, 0.0); 2]),
         };
 
-        if self.selection.is_some() {
-            datasets.push(
-                Dataset::default()
-                    .marker(symbols::Marker::Braille)
-                    .graph_type(GraphType::Line)
-                    .style(Style::default().green())
-                    .data(&selection_data.0),
-            );
-            datasets.push(
-                Dataset::default()
-                    .marker(symbols::Marker::Braille)
-                    .graph_type(GraphType::Line)
-                    .style(Style::default().green())
-                    .data(&selection_data.1),
-            )
+        match self.mode {
+            Mode::Select(_) => {
+                datasets.push(
+                    Dataset::default()
+                        .marker(symbols::Marker::Braille)
+                        .graph_type(GraphType::Line)
+                        .style(Style::default().green())
+                        .data(&selection_data.0),
+                );
+                datasets.push(
+                    Dataset::default()
+                        .marker(symbols::Marker::Braille)
+                        .graph_type(GraphType::Line)
+                        .style(Style::default().green())
+                        .data(&selection_data.1),
+                )
+            }
+            Mode::Normal => {}
         }
 
         let playhead_data = [
