@@ -21,6 +21,8 @@ pub enum Action {
     SelectAll,
     Amplify,
     Cut,
+    EffectLeft,
+    EffectRight,
 }
 
 #[derive(Debug, Deserialize)]
@@ -57,6 +59,9 @@ impl Default for Config {
                         (key('l'), Binding::Action(vec![Action::CursorEnd])),
                     ])),
                 ),
+                // effects
+                (key('u'), Binding::Action(vec![Action::EffectLeft])),
+                (key('i'), Binding::Action(vec![Action::EffectRight])),
             ]),
         }
     }

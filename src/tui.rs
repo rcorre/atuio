@@ -15,6 +15,7 @@ use crate::{
     config::{Action, Config},
 };
 
+#[derive(Clone)]
 struct Selection {
     start: Duration,
     end: Duration,
@@ -31,9 +32,31 @@ impl Selection {
     }
 }
 
+enum Effect {
+    Amplify { amount: f32 },
+}
+
+impl Effect {
+    fn increase(&mut self, delta: f32) {
+        match self {
+            Effect::Amplify { amount } => *amount += delta,
+        }
+    }
+
+    fn apply(&self, src: impl Source<Item = f32>) -> impl Source<Item = f32> {
+        match self {
+            Effect::Amplify { amount } => src.amplify(*amount),
+        }
+    }
+}
+
 enum Mode {
     Normal,
     Select(Selection),
+    Effect {
+        selection: Selection,
+        effect: Effect,
+    },
 }
 
 struct App {
@@ -119,8 +142,8 @@ impl App {
         );
 
         match &mut self.mode {
-            Mode::Normal => {}
             Mode::Select(sel) => sel.start = self.cursor,
+            _ => {}
         }
     }
 
@@ -185,6 +208,7 @@ impl App {
                     log::debug!("Started selection");
                     self.mode = Mode::Select(Selection::new(self.cursor))
                 }
+                Mode::Effect { .. } => {}
             },
             Action::SelectAll => match self.mode {
                 Mode::Select(Selection { start, end })
@@ -206,27 +230,15 @@ impl App {
             },
             Action::Amplify => match &self.mode {
                 Mode::Select(sel) => {
-                    let (start, end) = sel.normalize();
-                    let amount = 0.1;
-                    log::debug!("Amplifying selection ({start:?}, {end:?}) by {amount}");
-                    let source =
-                        std::mem::replace(&mut self.source, SamplesBuffer::new(1, 1, vec![]))
-                            .buffered();
-                    let channels = source.channels();
-                    let sample_rate = source.sample_rate();
-                    let before = source.clone().take_duration(start);
-                    let selected = source
-                        .clone()
-                        .skip_duration(start)
-                        .take_duration(end - start);
-                    let after = source.skip_duration(end);
-                    let new = before.chain(selected.amplify(amount)).chain(after);
-                    self.source =
-                        SamplesBuffer::new(channels, sample_rate, new.collect::<Vec<_>>());
+                    self.mode = Mode::Effect {
+                        effect: Effect::Amplify { amount: 1.0 },
+                        selection: sel.to_owned(),
+                    };
                 }
                 Mode::Normal => {
                     log::debug!("Cannot apply effect without selection");
                 }
+                Mode::Effect { .. } => {}
             },
             Action::Cut => match &self.mode {
                 Mode::Select(sel) => {
@@ -248,6 +260,19 @@ impl App {
                 Mode::Normal => {
                     log::debug!("Cannot apply effect without selection");
                 }
+                Mode::Effect { .. } => {}
+            },
+            Action::EffectLeft => match &mut self.mode {
+                Mode::Effect { effect, .. } => {
+                    effect.increase(-0.1);
+                }
+                _ => {}
+            },
+            Action::EffectRight => match &mut self.mode {
+                Mode::Effect { effect, .. } => {
+                    effect.increase(0.1);
+                }
+                _ => {}
             },
         }
         Ok(())
@@ -335,6 +360,21 @@ impl Widget for &App {
                     .map(|(i, v)| (((i as f64) / sample_rate) + start.as_secs_f64(), v as f64))
                     .collect()
             }
+            Mode::Effect { selection, effect } => {
+                let (start, end) = selection.normalize();
+                let start = start.max(self.window_start);
+                let end = end.min(self.window_end);
+                let source = self
+                    .source
+                    .clone()
+                    .skip_duration(start)
+                    .take_duration(end - start);
+                let source = effect.apply(source);
+                source
+                    .enumerate()
+                    .map(|(i, v)| (((i as f64) / sample_rate) + start.as_secs_f64(), v as f64))
+                    .collect()
+            }
             Mode::Normal => vec![],
         };
 
@@ -365,7 +405,11 @@ impl Widget for &App {
         ];
 
         let selection_data = match self.mode {
-            Mode::Select(Selection { start, end }) => (
+            Mode::Select(Selection { start, end })
+            | Mode::Effect {
+                selection: Selection { start, end },
+                ..
+            } => (
                 [(start.as_secs_f64(), -1.0), (start.as_secs_f64(), 1.0)],
                 [(end.as_secs_f64(), -1.0), (end.as_secs_f64(), 1.0)],
             ),
@@ -373,7 +417,7 @@ impl Widget for &App {
         };
 
         match self.mode {
-            Mode::Select(_) => {
+            Mode::Select(_) | Mode::Effect { .. } => {
                 datasets.push(
                     Dataset::default()
                         .marker(symbols::Marker::Braille)
@@ -561,7 +605,7 @@ mod tests {
     #[test]
     fn test_tui_amplify() {
         let mut test = Test::load("sine440fade.wav");
-        test.input("llllvllla");
+        test.input("llllvlllaiii");
         assert_snapshot!("amplify", test.render());
     }
 
